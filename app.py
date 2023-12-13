@@ -8,16 +8,21 @@ import time
 import threading
 import queue
 
-def record_buffer(buffer, samplerate, audio_queue, **kwargs):
+def record_buffer(samplerate, audio_queue, **kwargs):
     idx = 0
+    buffer = np.empty(((samplerate * 5), 1), dtype="float32")
 
     def callback(indata, frame_count, time_info, status):
         nonlocal idx
+        nonlocal buffer
         if status:
             print(status)
         remainder = len(buffer) - idx
         if remainder == 0:
-            raise sd.CallbackStop
+            audio_queue.put(buffer)
+            print('buffer reset')
+            buffer = np.empty((samplerate * 5, 1), dtype="float32")
+            idx = 0
         indata = indata[:remainder]
         buffer[idx:idx + len(indata)] = indata
         idx += len(indata)
@@ -26,12 +31,7 @@ def record_buffer(buffer, samplerate, audio_queue, **kwargs):
                         channels=buffer.shape[1], samplerate=samplerate, **kwargs):
         try:
             while True:
-                time.sleep(0.1)  # sleep for a short amount of time to reduce CPU usage
-                if idx >= len(buffer):
-                    audio_queue.put(buffer)
-                    print('buffer reset')
-                    buffer = np.empty((samplerate * 20, 1), dtype="float32")
-                    idx = 0
+                time.sleep(0.1)
         except KeyboardInterrupt:
             # close the stream on KeyboardInterrupt
             pass
@@ -85,15 +85,15 @@ def dequeue_to_list(q):
 
 async def main(samplerate=8000, model=load_model(), channels=1, dtype='float32', **kwargs):
     audio_queue = queue.Queue()
-    buffer = np.empty((samplerate * 5, channels), dtype=dtype)
     print('recording ...')
-    recording_thread = threading.Thread(target=record_buffer, args=(buffer, samplerate, audio_queue), kwargs=kwargs)
+    recording_thread = threading.Thread(target=record_buffer, args=(samplerate, audio_queue), kwargs=kwargs)
     recording_thread.start()
 
     time.sleep(5)
 
     while True:
         try:
+            time.sleep(0.5)  # sleep for a short amount of time to reduce CPU usage
             # append buffers, clear queue
             queue_length = audio_queue.qsize()
             if queue_length > 0:
@@ -108,11 +108,11 @@ async def main(samplerate=8000, model=load_model(), channels=1, dtype='float32',
                 execution_time = end_time - start_time
                 print("Transcribe execution time: %.2f seconds" % execution_time)
         except KeyboardInterrupt:
-            print('interrupted!')
-            break
-        except:
-            print("Error occured")
-            break
+            pass
+        except Exception as e:
+            print("Error occurred")
+            print(e)
+            return
 
     # TODO: figure out why this does not work
     # await transcribe(model, buffer.flatten())
