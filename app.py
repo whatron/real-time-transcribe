@@ -8,9 +8,9 @@ import time
 import threading
 import queue
 
-def record_buffer(samplerate, audio_queue, **kwargs):
+def record_buffer(samplerate, audio_queue, buffer_duration, **kwargs):
     idx = 0
-    buffer = np.empty(((samplerate * 5), 1), dtype="float32")
+    buffer = np.empty(((samplerate * buffer_duration), 1), dtype="float32")
 
     def callback(indata, frame_count, time_info, status):
         nonlocal idx
@@ -21,7 +21,7 @@ def record_buffer(samplerate, audio_queue, **kwargs):
         if remainder == 0:
             audio_queue.put(buffer)
             print('buffer reset')
-            buffer = np.empty((samplerate * 5, 1), dtype="float32")
+            buffer = np.empty((samplerate * buffer_duration, 1), dtype="float32")
             idx = 0
         indata = indata[:remainder]
         buffer[idx:idx + len(indata)] = indata
@@ -34,7 +34,7 @@ def record_buffer(samplerate, audio_queue, **kwargs):
                 time.sleep(0.1)
         except KeyboardInterrupt:
             # close the stream on KeyboardInterrupt
-            pass
+            raise KeyboardInterrupt
 
 def load_model(model_size="base"):
     try:
@@ -83,10 +83,10 @@ def dequeue_to_list(q):
         result_list.append(item)
     return result_list
 
-async def main(samplerate=8000, model=load_model(), channels=1, dtype='float32', **kwargs):
+async def main(samplerate=8000, model=load_model(), channels=1, dtype='float32', buffer_duration = 3, **kwargs):
     audio_queue = queue.Queue()
     print('recording ...')
-    recording_thread = threading.Thread(target=record_buffer, args=(samplerate, audio_queue), kwargs=kwargs)
+    recording_thread = threading.Thread(target=record_buffer, args=(samplerate, audio_queue, buffer_duration), kwargs=kwargs)
     recording_thread.start()
 
     time.sleep(5)
@@ -108,11 +108,11 @@ async def main(samplerate=8000, model=load_model(), channels=1, dtype='float32',
                 execution_time = end_time - start_time
                 print("Transcribe execution time: %.2f seconds" % execution_time)
         except KeyboardInterrupt:
-            pass
+            raise KeyboardInterrupt
         except Exception as e:
             print("Error occurred")
             print(e)
-            return
+            raise KeyboardInterrupt
 
     # TODO: figure out why this does not work
     # await transcribe(model, buffer.flatten())
