@@ -6,10 +6,9 @@ from faster_whisper import WhisperModel
 import soundfile as sf
 import time
 import threading
+import queue
 
-async def record_buffer(buffer, samplerate, **kwargs):
-    loop = asyncio.get_event_loop()
-    event = asyncio.Event()
+def record_buffer(buffer, samplerate, audio_queue, **kwargs):
     idx = 0
 
     def callback(indata, frame_count, time_info, status):
@@ -18,16 +17,24 @@ async def record_buffer(buffer, samplerate, **kwargs):
             print(status)
         remainder = len(buffer) - idx
         if remainder == 0:
-            loop.call_soon_threadsafe(event.set)
             raise sd.CallbackStop
         indata = indata[:remainder]
         buffer[idx:idx + len(indata)] = indata
         idx += len(indata)
 
-    stream = sd.InputStream(callback=callback, dtype=buffer.dtype,
-                            channels=buffer.shape[1],samplerate=samplerate, **kwargs)
-    with stream:
-        await event.wait()
+    with sd.InputStream(callback=callback, dtype=buffer.dtype,
+                        channels=buffer.shape[1], samplerate=samplerate, **kwargs):
+        try:
+            while True:
+                time.sleep(0.1)  # sleep for a short amount of time to reduce CPU usage
+                if idx >= len(buffer):
+                    audio_queue.put(buffer)
+                    print('buffer reset')
+                    buffer = np.empty((samplerate * 20, 1), dtype="float32")
+                    idx = 0
+        except KeyboardInterrupt:
+            # close the stream on KeyboardInterrupt
+            pass
 
 def load_model(model_size="base"):
     try:
@@ -51,14 +58,14 @@ def load_model(model_size="base"):
                     print("Running on CPU with INT8")
                 except:
                     raise Exception("No supported device found")
-        return model
+    return model
 
 
 async def transcribe(model, audio):
 
     segments, info = model.transcribe(audio, beam_size=5, vad_filter=True, word_timestamps=True)
 
-    print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
+    # print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
 
     word_list = []
 
@@ -68,20 +75,45 @@ async def transcribe(model, audio):
             print("[%.2fs -> %.2fs] %s" % (word.start, word.end, word.word))
             
     # print(word_list)
+    
+def dequeue_to_list(q):
+    result_list = []
+    while not q.empty():
+        item = q.get()
+        result_list.append(item)
+    return result_list
 
 async def main(samplerate=8000, model=load_model(), channels=1, dtype='float32', **kwargs):
-    buffer = np.empty((samplerate * 10, channels), dtype=dtype)
+    audio_queue = queue.Queue()
+    buffer = np.empty((samplerate * 5, channels), dtype=dtype)
     print('recording ...')
-    await record_buffer(buffer, samplerate, **kwargs)
-    print('done')
+    recording_thread = threading.Thread(target=record_buffer, args=(buffer, samplerate, audio_queue), kwargs=kwargs)
+    recording_thread.start()
 
-    start_time = time.time()
-    sf.write('op.wav', buffer, samplerate)
-    await transcribe(model, 'op.wav')
-    end_time = time.time()
-    execution_time = end_time - start_time
-    print("Transcribe execution time: %.2f seconds" % execution_time)
-    
+    time.sleep(5)
+
+    while True:
+        try:
+            # append buffers, clear queue
+            queue_length = audio_queue.qsize()
+            if queue_length > 0:
+                start_time = time.time()
+                if queue_length > 1:
+                    buffer = np.concatenate(buffer, dequeue_to_list(audio_queue), axis=0)
+                else:
+                    buffer = audio_queue.get()
+                sf.write('op.wav', buffer, samplerate)
+                await transcribe(model, 'op.wav')
+                end_time = time.time()
+                execution_time = end_time - start_time
+                print("Transcribe execution time: %.2f seconds" % execution_time)
+        except KeyboardInterrupt:
+            print('interrupted!')
+            break
+        except:
+            print("Error occured")
+            break
+
     # TODO: figure out why this does not work
     # await transcribe(model, buffer.flatten())
 
