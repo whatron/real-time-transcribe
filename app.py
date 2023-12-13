@@ -105,7 +105,7 @@ def dequeue_to_list(q):
 async def main(samplerate=8000, model=load_model(), channels=1, dtype='float32', buffer_duration = 3, **kwargs):
     audio_queue = queue.Queue()
     stop_event = threading.Event()
-    print('recording ...')
+    print('Recording ...')
     recording_thread = threading.Thread(target=record_buffer, args=(samplerate, audio_queue, buffer_duration, stop_event), kwargs=kwargs)
     recording_thread.start()
 

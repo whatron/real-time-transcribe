@@ -1,2 +1,2 @@
-# live-transcribe
- Live transcribe using OpenAI Whisper
+# Real Time Transcribe
+ Real Time Speech Transcription using OpenAI Whisper
