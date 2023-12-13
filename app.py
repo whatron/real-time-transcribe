@@ -4,6 +4,8 @@ import numpy as np
 import sounddevice as sd
 from faster_whisper import WhisperModel
 import soundfile as sf
+import time
+import threading
 
 async def record_buffer(buffer, samplerate, **kwargs):
     loop = asyncio.get_event_loop()
@@ -49,12 +51,12 @@ def load_model(model_size="base"):
                     print("Running on CPU with INT8")
                 except:
                     raise Exception("No supported device found")
-        return model, model.compute_type
+        return model
 
 
-async def transcribe(model):
+async def transcribe(model, audio):
 
-    segments, info = model.transcribe("op.wav", beam_size=5, vad_filter=True, word_timestamps=True)
+    segments, info = model.transcribe(audio, beam_size=5, vad_filter=True, word_timestamps=True)
 
     print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
 
@@ -73,9 +75,15 @@ async def main(samplerate=8000, model=load_model(), channels=1, dtype='float32',
     await record_buffer(buffer, samplerate, **kwargs)
     print('done')
 
-    # sf.write('op.wav', buffer, samplerate)
-    await transcribe(model)
-
+    start_time = time.time()
+    sf.write('op.wav', buffer, samplerate)
+    await transcribe(model, 'op.wav')
+    end_time = time.time()
+    execution_time = end_time - start_time
+    print("Transcribe execution time: %.2f seconds" % execution_time)
+    
+    # TODO: figure out why this does not work
+    # await transcribe(model, buffer.flatten())
 
 if __name__ == "__main__":
     try:
