@@ -52,9 +52,9 @@ This project utilizes the Whisper ASR (Automatic Speech Recognition) model to tr
 
 By default, the script uses the "base" model size. You can change the model size by passing a command-line argument:
 
-'''bash
+```bash
 python transcript.py large-v2
-'''
+```
 
 Supported model sizes (from fastest to slowest): "tiny", "tiny.en", "small", "small.en", "base", "base.en", "medium", "medium.en", "large-v1", "large-v2", "large-v3"<br>
 If transcription is taking too long, it is reccomended to use a faster model.
