@@ -21,7 +21,7 @@ This project utilizes the Whisper ASR (Automatic Speech Recognition) model to tr
      .\venv\Scripts\activate
      ```
 
-   - On macOS/Linux:
+      - On macOS/Linux:
 
      ```bash
      source venv/bin/activate
