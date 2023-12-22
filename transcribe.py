@@ -8,26 +8,21 @@ import time
 import threading
 import queue
 
-# TODO:
-# !!recheck imports & add requirements.txt
-# Priority: High
-#       Split audio in transcriber rather than recorder
-#       ?Silence to split buffer (in addition to) rather than buffer size
-#       refactor code
-# Seperate Terminal Transcribe and Transcribe library - 2 repos
-#       add way to change model size
-#       add comments
+SUPPORTED_MODELS = ["tiny", "tiny.en", "small", "small.en", "base", "base.en" "medium", "medium.en", "large-v1", "large-v2", "large-v3", "xl"]
 
-
+# Records audio and adds it to a queue
 def record_buffer(samplerate, audio_queue, buffer_duration, stop_event, **kwargs):
     idx = 0
     buffer = np.empty(((samplerate * buffer_duration), 1), dtype="float32")
 
+    # Callback function for sounddevice
     def callback(indata, frame_count, time_info, status):
         nonlocal idx
         nonlocal buffer
         if status:
             print(status)
+            
+        # If the buffer is full, add it to the queue and create a new buffer
         remainder = len(buffer) - idx
         if remainder == 0:
             audio_queue.put(buffer)
@@ -49,12 +44,12 @@ def record_buffer(samplerate, audio_queue, buffer_duration, stop_event, **kwargs
             audio_queue.put(buffer[:idx])
             stop_event.set()
 
-
+# Loads the Whisper ASR model based on command line arguments and checks for supported devices
 def load_model(model_size="base"):
     if len(sys.argv) == 2:
-        if sys.argv[1] not in ["tiny", "tiny.en", "small", "small.en", "base", "base.en" "medium", "medium.en", "large-v1", "large-v2", "large-v3", "xl"]:
+        if str(sys.argv[1]) not in SUPPORTED_MODELS:
             raise Exception("Invalid model")
-        model_size = {sys.argv[1]}
+        model_size = str(sys.argv[1])
     elif len(sys.argv) > 2:
         raise Exception("Too many arguments")
 
@@ -84,7 +79,7 @@ def load_model(model_size="base"):
                     raise Exception("No supported device found")
     return model
 
-
+# Transcribes audio and prints it to the console
 async def transcribe(model, audio):
 
     segments, info = model.transcribe(
@@ -92,7 +87,7 @@ async def transcribe(model, audio):
 
     # print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
 
-    word_list = []
+    # word_list = []
 
     for segment in segments:
         print(segment.text, end="", flush=True)
@@ -107,7 +102,7 @@ async def transcribe(model, audio):
 
     # print(word_list)
 
-
+# Converts queue to list
 def dequeue_to_list(q):
     return [q.get() for _ in range(q.qsize())]
 
@@ -115,19 +110,20 @@ def dequeue_to_list(q):
 async def main(samplerate=8000, model=load_model(), channels=1, dtype='float32', buffer_duration=3, **kwargs):
     audio_queue = queue.Queue()
     stop_event = threading.Event()
+
     print('Recording ...')
-    recording_thread = threading.Thread(target=record_buffer, args=(
-        samplerate, audio_queue, buffer_duration, stop_event), kwargs=kwargs)
+    recording_thread = threading.Thread(target=record_buffer, args=(samplerate, audio_queue, buffer_duration, stop_event), kwargs=kwargs)
     recording_thread.start()
 
     time.sleep(5)
     print("Transcript:")
 
+
     while True:
         try:
-            # sleep for a short amount of time to reduce CPU usage
+            # Sleep for a short amount of time to reduce CPU usage
             time.sleep(0.5)
-            # append buffers, clear queue
+            # Append buffers, clear queue
             queue_length = audio_queue.qsize()
             if queue_length > 0:
                 start_time = time.time()
@@ -137,12 +133,17 @@ async def main(samplerate=8000, model=load_model(), channels=1, dtype='float32',
                 else:
                     buffer = audio_queue.get()
                 sf.write('buffer.wav', buffer, samplerate)
-                # TODO: figure out why this does not work
+                
+                # Not sure why line below does not work
                 # await transcribe(model, buffer.flatten())
+                
                 await transcribe(model, 'buffer.wav')
-                end_time = time.time()
+                
+                # Uncomment below to see execution time
+                # end_time = time.time()
                 # execution_time = end_time - start_time
                 # print("Transcribe execution time: %.2f seconds" % execution_time)
+                
         except KeyboardInterrupt:
             print("\nStopping...")
             stop_event.set()
