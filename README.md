@@ -63,8 +63,8 @@ If transcription is taking too long, it is reccomended to use a faster model.
 
 Ensure you have the necessary requirements installed by running:
 
-'''bash
+```bash
 pip install -r requirements.txt
-'''
+```
 
 For more information about the Whisper ASR model, visit [faster-whisper](https://github.com/SYSTRAN/faster-whisper).
