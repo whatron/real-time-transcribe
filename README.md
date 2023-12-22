@@ -15,13 +15,13 @@ This project utilizes the Whisper ASR (Automatic Speech Recognition) model to tr
    ```bash
    python -m venv venv
    ```
-      - On Windows:
+   - On Windows:
 
      ```bash
      .\venv\Scripts\activate
      ```
 
-      - On macOS/Linux:
+   - On macOS/Linux:
 
      ```bash
      source venv/bin/activate
